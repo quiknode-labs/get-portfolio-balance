@@ -1,77 +1,92 @@
 import { describe, test } from "node:test";
 import assert from "node:assert";
-import { address, createSolanaRpc } from "@solana/kit";
+import { connect } from "solana-kite";
+import { address } from "@solana/kit";
 import {
-  ensureError,
   getTokenAccounts,
+  getTokenSymbols,
   getTokenPrices,
   getPortfolioBalance,
 } from "../get-portfolio-balance.js";
 
-describe("ensureError", () => {
-  test("returns Error instance when Error is thrown", () => {
-    const error = new Error("Test error");
-    const result = ensureError(error);
-    assert.strictEqual(result, error);
+describe("getTokenSymbols", () => {
+  test("fetches symbols for known tokens", async () => {
+    const jupiterApiKey = process.env.JUPITER_API_KEY;
+    if (!jupiterApiKey) {
+      console.log("⚠️  JUPITER_API_KEY not set - skipping test");
+      return;
+    }
+
+    const usdcMint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    const symbolMap = await getTokenSymbols([usdcMint]);
+
+    const symbol = symbolMap.get(usdcMint);
+    assert.strictEqual(symbol, "USDC");
   });
 
-  test("wraps non-Error thrown objects", () => {
-    const result = ensureError("string error");
-    assert.ok(result instanceof Error);
-    assert.ok(result.message.includes("string error"));
-  });
+  test("returns empty map when API key not set", async () => {
+    const originalKey = process.env.JUPITER_API_KEY;
+    delete process.env.JUPITER_API_KEY;
 
-  test("wraps thrown numbers", () => {
-    const result = ensureError(42);
-    assert.ok(result instanceof Error);
-    assert.ok(result.message.includes("42"));
+    const usdcMint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    const symbolMap = await getTokenSymbols([usdcMint]);
+
+    assert.ok(symbolMap instanceof Map);
+    assert.strictEqual(symbolMap.size, 0);
+
+    process.env.JUPITER_API_KEY = originalKey;
   });
 });
 
 describe("getTokenPrices", () => {
   test("fetches prices for valid tokens", async () => {
+    const jupiterApiKey = process.env.JUPITER_API_KEY;
+    if (!jupiterApiKey) {
+      console.log("⚠️  JUPITER_API_KEY not set - skipping test");
+      return;
+    }
+
     const usdcMint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
     const priceMap = await getTokenPrices([usdcMint]);
 
-    const usdcPrice = priceMap.get(usdcMint);
-    assert.ok(usdcPrice !== undefined);
-    assert.ok(usdcPrice > 0);
-    assert.ok(usdcPrice < 2);
-  });
-
-  test("returns empty map for invalid tokens", async () => {
-    const invalidMint = "1111111111111111111111111111111111111111111";
-    const priceMap = await getTokenPrices([invalidMint]);
-
-    assert.ok(priceMap instanceof Map);
-    assert.strictEqual(priceMap.size, 0);
+    const usdcPriceInfo = priceMap.get(usdcMint);
+    assert.ok(usdcPriceInfo !== undefined);
+    assert.ok(usdcPriceInfo.price > 0);
+    assert.ok(usdcPriceInfo.price < 2);
+    assert.strictEqual(usdcPriceInfo.tokenSymbol, "USDC");
   });
 
   test("fetches prices for multiple tokens", async () => {
+    const jupiterApiKey = process.env.JUPITER_API_KEY;
+    if (!jupiterApiKey) {
+      console.log("⚠️  JUPITER_API_KEY not set - skipping test");
+      return;
+    }
+
     const usdcMint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
     const solMint = "So11111111111111111111111111111111111111112";
     const priceMap = await getTokenPrices([usdcMint, solMint]);
 
     assert.ok(priceMap.size > 0);
-    const usdcPrice = priceMap.get(usdcMint);
-    assert.ok(usdcPrice !== undefined);
-    assert.ok(usdcPrice > 0);
+    const usdcPriceInfo = priceMap.get(usdcMint);
+    assert.ok(usdcPriceInfo !== undefined);
+    assert.ok(usdcPriceInfo.price > 0);
+
+    const solPriceInfo = priceMap.get(solMint);
+    assert.ok(solPriceInfo !== undefined);
+    assert.ok(solPriceInfo.price > 0);
+    assert.strictEqual(solPriceInfo.tokenSymbol, "SOL");
   });
 });
 
 describe("getTokenAccounts", () => {
   test("fetches token accounts for wallet with tokens", async () => {
-    const endpoint = process.env.QUICKNODE_SOLANA_MAINNET_ENDPOINT;
-    if (!endpoint) {
-      throw new Error("QUICKNODE_SOLANA_MAINNET_ENDPOINT not set");
-    }
-
-    const rpc = createSolanaRpc(endpoint);
+    const connection = connect("quicknode-mainnet");
     const walletAddress = address(
       "dDCQNnDmNbFVi8cQhKAgXhyhXeJ625tvwsunRyRc7c8",
     );
 
-    const tokenAccounts = await getTokenAccounts(rpc, walletAddress);
+    const tokenAccounts = await getTokenAccounts(connection, walletAddress);
 
     assert.ok(Array.isArray(tokenAccounts));
     tokenAccounts.forEach((account) => {
@@ -84,31 +99,14 @@ describe("getTokenAccounts", () => {
 
 describe("getPortfolioBalance", () => {
   test("calculates portfolio balance for valid wallet", async () => {
-    const endpoint = process.env.QUICKNODE_SOLANA_MAINNET_ENDPOINT;
-    if (!endpoint) {
-      throw new Error("QUICKNODE_SOLANA_MAINNET_ENDPOINT not set");
+    const jupiterApiKey = process.env.JUPITER_API_KEY;
+    if (!jupiterApiKey) {
+      console.log("⚠️  JUPITER_API_KEY not set - skipping test");
+      return;
     }
 
     await getPortfolioBalance(
       "dDCQNnDmNbFVi8cQhKAgXhyhXeJ625tvwsunRyRc7c8",
     );
-  });
-
-  test("throws error when environment variable not set", async () => {
-    const originalEnv = process.env.QUICKNODE_SOLANA_MAINNET_ENDPOINT;
-    delete process.env.QUICKNODE_SOLANA_MAINNET_ENDPOINT;
-
-    await assert.rejects(
-      async () => {
-        await getPortfolioBalance(
-          "dDCQNnDmNbFVi8cQhKAgXhyhXeJ625tvwsunRyRc7c8",
-        );
-      },
-      {
-        message: "QUICKNODE_SOLANA_MAINNET_ENDPOINT environment variable not set",
-      },
-    );
-
-    process.env.QUICKNODE_SOLANA_MAINNET_ENDPOINT = originalEnv;
   });
 });

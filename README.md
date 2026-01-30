@@ -1,14 +1,17 @@
 # Get Portfolio Balance
 
-Get the USD value of all tokens in a Solana wallet using DeFiLlama's free price API.
+Get the USD value of all tokens in a Solana wallet using Jupiter Price API v3.
 
 ## Setup
 
-Set your QuickNode Solana mainnet endpoint:
+Set your QuickNode Solana mainnet endpoint and Jupiter API key:
 
 ```bash
 export QUICKNODE_SOLANA_MAINNET_ENDPOINT="https://your-endpoint.solana-mainnet.quiknode.pro/your-key/"
+export JUPITER_API_KEY="your-jupiter-api-key"
 ```
+
+Get a Jupiter API key at: https://portal.jup.ag
 
 Install dependencies:
 

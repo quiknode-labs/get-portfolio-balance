@@ -7,7 +7,8 @@
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
-    "@solana/kit": "^2.2.3"
+    "@solana/kit": "^2.2.3",
+    "solana-kite": "^2.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

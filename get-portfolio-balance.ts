@@ -1,46 +1,23 @@
+import { connect } from "solana-kite";
+import { address, type Address } from "@solana/kit";
 import {
-  address,
-  createSolanaRpc,
-  type Address,
-} from "@solana/kit";
-
-interface TokenAccount {
-  mint: string;
-  amount: number;
-  decimals: number;
-}
-
-interface DeFiLlamaPriceData {
-  decimals: number;
-  symbol: string;
-  price: number;
-  timestamp: number;
-  confidence: number;
-}
-
-interface PortfolioToken {
-  mint: string;
-  balance: number;
-  priceUsd: number;
-  valueUsd: number;
-}
-
-export const ensureError = function (thrownObject: unknown): Error {
-  if (thrownObject instanceof Error) {
-    return thrownObject;
-  }
-  return new Error(`Non-Error thrown: ${String(thrownObject)}`);
-};
+  type TokenAccount,
+  type JupiterPriceData,
+  type JupiterTokenInfo,
+  type PortfolioToken,
+  type TokenPriceInfo,
+} from "./lib/interfaces.js";
+import { ensureError } from "./lib/utils.js";
 
 export const getTokenAccounts = async function (
-  rpc: ReturnType<typeof createSolanaRpc>,
+  connection: ReturnType<typeof connect>,
   walletAddress: Address,
 ): Promise<Array<TokenAccount>> {
   const TOKEN_PROGRAM_ID = address(
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   );
 
-  const response = await rpc
+  const response = await connection.rpc
     .getTokenAccountsByOwner(walletAddress, {
       programId: TOKEN_PROGRAM_ID,
     }, {
@@ -58,39 +35,90 @@ export const getTokenAccounts = async function (
   });
 };
 
+export const getTokenSymbols = async function (
+  mintAddresses: Array<string>,
+): Promise<Map<string, string>> {
+  const jupiterApiKey = process.env.JUPITER_API_KEY;
+
+  if (!jupiterApiKey) {
+    console.warn("JUPITER_API_KEY not set, using shortened mint addresses");
+    return new Map();
+  }
+
+  const symbolMap = new Map<string, string>();
+
+  for (const mint of mintAddresses) {
+    try {
+      const response = await fetch(
+        `https://api.jup.ag/tokens/v2/search?query=${mint}`,
+        {
+          headers: {
+            "x-api-key": jupiterApiKey,
+          },
+        },
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const tokenInfo = data[0] as JupiterTokenInfo;
+          symbolMap.set(mint, tokenInfo.symbol);
+        }
+      }
+    } catch (thrownObject) {
+      const error = ensureError(thrownObject);
+      console.warn(`Failed to fetch symbol for ${mint}: ${error.message}`);
+    }
+  }
+
+  return symbolMap;
+};
+
 export const getTokenPrices = async function (
   mintAddresses: Array<string>,
-): Promise<Map<string, number>> {
-  const coinsParam = mintAddresses
-    .map((mint) => `solana:${mint}`)
-    .join(",");
-  const defiLlamaUrl = `https://coins.llama.fi/prices/current/${coinsParam}`;
+): Promise<Map<string, TokenPriceInfo>> {
+  const jupiterApiKey = process.env.JUPITER_API_KEY;
+
+  if (!jupiterApiKey) {
+    console.warn("JUPITER_API_KEY not set, skipping price fetch");
+    return new Map();
+  }
+
+  const idsParam = mintAddresses.join(",");
+  const jupiterUrl = `https://api.jup.ag/price/v3?ids=${idsParam}`;
 
   try {
-    const response = await fetch(defiLlamaUrl);
+    const response = await fetch(jupiterUrl, {
+      headers: {
+        "x-api-key": jupiterApiKey,
+      },
+    });
 
     if (!response.ok) {
-      console.warn(`Failed to fetch prices from DeFiLlama: ${response.status}`);
+      console.warn(`Failed to fetch prices from Jupiter: ${response.status}`);
       return new Map();
     }
 
     const data = await response.json();
-    const priceMap = new Map<string, number>();
+    const priceMap = new Map<string, TokenPriceInfo>();
 
-    if (data.coins) {
-      for (const [key, priceData] of Object.entries(data.coins)) {
-        const mint = key.replace("solana:", "");
-        const price = (priceData as DeFiLlamaPriceData).price;
-        if (price) {
-          priceMap.set(mint, price);
-        }
+    const symbolMap = await getTokenSymbols(mintAddresses);
+
+    for (const [mint, priceData] of Object.entries(data)) {
+      const jupiterData = priceData as JupiterPriceData;
+      if (jupiterData.usdPrice) {
+        const tokenSymbol = symbolMap.get(mint) || mint.substring(0, 8);
+        priceMap.set(mint, {
+          price: jupiterData.usdPrice,
+          tokenSymbol: tokenSymbol,
+        });
       }
     }
 
     return priceMap;
   } catch (thrownObject) {
     const error = ensureError(thrownObject);
-    console.warn(`Error fetching prices from DeFiLlama: ${error.message}`);
+    console.warn(`Error fetching prices from Jupiter: ${error.message}`);
     return new Map();
   }
 };
@@ -98,67 +126,89 @@ export const getTokenPrices = async function (
 export const getPortfolioBalance = async function (
   walletAddressString: string,
 ): Promise<void> {
-  const quicknodeEndpoint = process.env.QUICKNODE_SOLANA_MAINNET_ENDPOINT;
+  console.log(`\n💼 Address: ${walletAddressString}\n`);
 
-  if (!quicknodeEndpoint) {
-    throw new Error("QUICKNODE_SOLANA_MAINNET_ENDPOINT environment variable not set");
-  }
-
-  console.log(`Fetching portfolio for wallet: ${walletAddressString}\n`);
-
-  const rpc = createSolanaRpc(quicknodeEndpoint);
+  const connection = connect("quicknode-mainnet");
   const walletAddress = address(walletAddressString);
 
-  const tokenAccounts = await getTokenAccounts(rpc, walletAddress);
+  const solBalanceResponse = await connection.rpc.getBalance(walletAddress).send();
+  const solBalance = Number(solBalanceResponse.value) / 1000000000;
 
-  console.log(`Found ${tokenAccounts.length} token accounts\n`);
+  const tokenAccounts = await getTokenAccounts(connection, walletAddress);
 
   const nonZeroAccounts = tokenAccounts.filter(
     (account) => account.amount > 0,
   );
 
-  if (nonZeroAccounts.length === 0) {
-    console.log("No tokens with non-zero balances found");
-    console.log("\n" + "=".repeat(70));
-    console.log("Total Portfolio Value: $0.00");
-    console.log("=".repeat(70));
-    return;
-  }
+  const allMintAddresses = [
+    "So11111111111111111111111111111111111111112",
+    ...nonZeroAccounts.map((account) => account.mint),
+  ];
 
-  const mintAddresses = nonZeroAccounts.map((account) => account.mint);
-  const priceMap = await getTokenPrices(mintAddresses);
+  const priceMap = await getTokenPrices(allMintAddresses);
 
   const portfolio: Array<PortfolioToken> = [];
   let totalValueUsd = 0;
+  let tokensWithoutPrices = 0;
+
+  const solMint = "So11111111111111111111111111111111111111112";
+  const solPriceInfo = priceMap.get(solMint);
+  if (solPriceInfo && solBalance > 0) {
+    const solValueUsd = solBalance * solPriceInfo.price;
+    totalValueUsd += solValueUsd;
+    portfolio.push({
+      mint: solMint,
+      tokenSymbol: "SOL",
+      balance: solBalance,
+      priceUsd: solPriceInfo.price,
+      valueUsd: solValueUsd,
+    });
+  }
 
   for (const tokenAccount of nonZeroAccounts) {
-    const priceUsd = priceMap.get(tokenAccount.mint);
+    const priceInfo = priceMap.get(tokenAccount.mint);
 
-    if (!priceUsd) {
-      console.log(
-        `⚠️  ${tokenAccount.mint}: ${tokenAccount.amount} (price unavailable)`,
-      );
+    if (!priceInfo) {
+      tokensWithoutPrices++;
       continue;
     }
 
-    const valueUsd = tokenAccount.amount * priceUsd;
+    const valueUsd = tokenAccount.amount * priceInfo.price;
     totalValueUsd += valueUsd;
 
     portfolio.push({
       mint: tokenAccount.mint,
+      tokenSymbol: priceInfo.tokenSymbol,
       balance: tokenAccount.amount,
-      priceUsd: priceUsd,
+      priceUsd: priceInfo.price,
       valueUsd: valueUsd,
     });
+  }
+
+  portfolio.sort((a, b) => b.valueUsd - a.valueUsd);
+
+  for (const token of portfolio) {
+    const formattedBalance = token.balance.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    const alignedBalance = formattedBalance.padStart(20);
+
+    const formattedValue = token.valueUsd.toFixed(2);
+    const alignedValue = formattedValue.padStart(10);
 
     console.log(
-      `${tokenAccount.mint.substring(0, 10)}... ${tokenAccount.amount.toFixed(4).padStart(15)} × $${priceUsd.toFixed(6).padStart(12)} = $${valueUsd.toFixed(2).padStart(12)}`,
+      `  ${token.tokenSymbol.padEnd(10)} ${alignedBalance} 💵 $${alignedValue}`,
     );
   }
 
-  console.log("\n" + "=".repeat(70));
-  console.log(`Total Portfolio Value: $${totalValueUsd.toFixed(2)}`);
-  console.log("=".repeat(70));
+  console.log(`\n💰 Total: $${totalValueUsd.toFixed(2)}`);
+
+  if (tokensWithoutPrices > 0) {
+    console.log(
+      `\n❓ Plus ${tokensWithoutPrices} token${tokensWithoutPrices === 1 ? "" : "s"} for which no price could be obtained`,
+    );
+  }
 };
 
 if (import.meta.url === `file://${process.argv[1]}`) {
