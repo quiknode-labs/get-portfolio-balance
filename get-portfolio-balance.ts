@@ -10,18 +10,16 @@ interface TokenAccount {
   decimals: number;
 }
 
-interface CoinPaprikaTokenData {
-  price_sol: number;
-  price_usd: number;
-  name: string;
-  symbol: string;
+interface DeFiLlamaPriceData {
   decimals: number;
+  symbol: string;
+  price: number;
+  timestamp: number;
+  confidence: number;
 }
 
 interface PortfolioToken {
   mint: string;
-  name: string;
-  symbol: string;
   balance: number;
   priceUsd: number;
   valueUsd: number;
@@ -60,35 +58,40 @@ export const getTokenAccounts = async function (
   });
 };
 
-export const getTokenPrice = async function (
-  quicknodeEndpoint: string,
-  mintAddress: string,
-): Promise<CoinPaprikaTokenData | null> {
-  const endpointWithoutTrailingSlash = quicknodeEndpoint.replace(/\/$/, "");
-  const coinPaprikaUrl = `${endpointWithoutTrailingSlash}/addon/912/networks/solana/tokens/${mintAddress}`;
+export const getTokenPrices = async function (
+  mintAddresses: Array<string>,
+): Promise<Map<string, number>> {
+  const coinsParam = mintAddresses
+    .map((mint) => `solana:${mint}`)
+    .join(",");
+  const defiLlamaUrl = `https://coins.llama.fi/prices/current/${coinsParam}`;
 
   try {
-    const response = await fetch(coinPaprikaUrl);
+    const response = await fetch(defiLlamaUrl);
 
     if (!response.ok) {
-      console.warn(
-        `Failed to fetch price for ${mintAddress}: ${response.status}`,
-      );
-      return null;
+      console.warn(`Failed to fetch prices from DeFiLlama: ${response.status}`);
+      return new Map();
     }
 
     const data = await response.json();
-    return {
-      price_sol: data.price_sol || 0,
-      price_usd: data.price_usd || 0,
-      name: data.name || "Unknown",
-      symbol: data.symbol || "Unknown",
-      decimals: data.decimals || 0,
-    };
+    const priceMap = new Map<string, number>();
+
+    if (data.coins) {
+      for (const [key, priceData] of Object.entries(data.coins)) {
+        const mint = key.replace("solana:", "");
+        const price = (priceData as DeFiLlamaPriceData).price;
+        if (price) {
+          priceMap.set(mint, price);
+        }
+      }
+    }
+
+    return priceMap;
   } catch (thrownObject) {
     const error = ensureError(thrownObject);
-    console.warn(`Error fetching price for ${mintAddress}: ${error.message}`);
-    return null;
+    console.warn(`Error fetching prices from DeFiLlama: ${error.message}`);
+    return new Map();
   }
 };
 
@@ -110,40 +113,46 @@ export const getPortfolioBalance = async function (
 
   console.log(`Found ${tokenAccounts.length} token accounts\n`);
 
+  const nonZeroAccounts = tokenAccounts.filter(
+    (account) => account.amount > 0,
+  );
+
+  if (nonZeroAccounts.length === 0) {
+    console.log("No tokens with non-zero balances found");
+    console.log("\n" + "=".repeat(70));
+    console.log("Total Portfolio Value: $0.00");
+    console.log("=".repeat(70));
+    return;
+  }
+
+  const mintAddresses = nonZeroAccounts.map((account) => account.mint);
+  const priceMap = await getTokenPrices(mintAddresses);
+
   const portfolio: Array<PortfolioToken> = [];
   let totalValueUsd = 0;
 
-  for (const tokenAccount of tokenAccounts) {
-    if (tokenAccount.amount === 0) {
-      continue;
-    }
+  for (const tokenAccount of nonZeroAccounts) {
+    const priceUsd = priceMap.get(tokenAccount.mint);
 
-    const priceData = await getTokenPrice(
-      quicknodeEndpoint,
-      tokenAccount.mint,
-    );
-
-    if (!priceData) {
+    if (!priceUsd) {
       console.log(
         `⚠️  ${tokenAccount.mint}: ${tokenAccount.amount} (price unavailable)`,
       );
       continue;
     }
 
-    const valueUsd = tokenAccount.amount * priceData.price_usd;
+    const valueUsd = tokenAccount.amount * priceUsd;
     totalValueUsd += valueUsd;
 
     portfolio.push({
       mint: tokenAccount.mint,
-      name: priceData.name,
-      symbol: priceData.symbol,
       balance: tokenAccount.amount,
-      priceUsd: priceData.price_usd,
+      priceUsd: priceUsd,
       valueUsd: valueUsd,
     });
 
     console.log(
-      `${priceData.symbol.padEnd(10)} ${tokenAccount.amount.toFixed(4).padStart(15)} × $${priceData.price_usd.toFixed(6).padStart(12)} = $${valueUsd.toFixed(2).padStart(12)}`,
+      `${tokenAccount.mint.substring(0, 10)}... ${tokenAccount.amount.toFixed(4).padStart(15)} × $${priceUsd.toFixed(6).padStart(12)} = $${valueUsd.toFixed(2).padStart(12)}`,
     );
   }
 

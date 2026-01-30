@@ -1,19 +1,14 @@
 # Get Portfolio Balance
 
-Get the USD value of all tokens in a Solana wallet using QuickNode's CoinPaprika addon.
+Get the USD value of all tokens in a Solana wallet using DeFiLlama's free price API.
 
 ## Setup
 
-Enable the CoinPaprika Solana Token Price addon in your QuickNode dashboard, then set your endpoint:
+Set your QuickNode Solana mainnet endpoint:
 
 ```bash
 export QUICKNODE_SOLANA_MAINNET_ENDPOINT="https://your-endpoint.solana-mainnet.quiknode.pro/your-key/"
 ```
-
-To enable the addon:
-1. Go to your QuickNode endpoint dashboard
-2. Navigate to the "Add-ons" section
-3. Enable "CoinPaprika Solana Token Price & Liquidity Pools API" (addon #912)
 
 Install dependencies:
 
@@ -23,19 +18,13 @@ npm install
 
 ## Usage
 
-### Using QuickNode CoinPaprika (requires addon enabled):
+Run the script with the test wallet:
 
 ```bash
 npm start
 ```
 
-### Using DeFiLlama (free, no addon required):
-
-```bash
-npm run start:defillama
-```
-
-Modify the wallet address in the respective file to check a different wallet.
+Modify the wallet address in [get-portfolio-balance.ts](get-portfolio-balance.ts) to check a different wallet.
 
 ## Testing
 

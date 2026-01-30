@@ -4,7 +4,7 @@ import { address, createSolanaRpc } from "@solana/kit";
 import {
   ensureError,
   getTokenAccounts,
-  getTokenPrice,
+  getTokenPrices,
   getPortfolioBalance,
 } from "../get-portfolio-balance.js";
 
@@ -28,38 +28,34 @@ describe("ensureError", () => {
   });
 });
 
-describe("getTokenPrice", () => {
-  test("fetches price for valid token", async () => {
-    const endpoint = process.env.QUICKNODE_SOLANA_MAINNET_ENDPOINT;
-    if (!endpoint) {
-      throw new Error("QUICKNODE_SOLANA_MAINNET_ENDPOINT not set");
-    }
-
+describe("getTokenPrices", () => {
+  test("fetches prices for valid tokens", async () => {
     const usdcMint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-    const priceData = await getTokenPrice(endpoint, usdcMint);
+    const priceMap = await getTokenPrices([usdcMint]);
 
-    if (priceData === null) {
-      console.log(
-        "⚠️  CoinPaprika addon not enabled - skipping price validation",
-      );
-      return;
-    }
-
-    assert.ok(priceData.symbol === "USDC");
-    assert.ok(priceData.price_usd > 0);
-    assert.ok(priceData.price_usd < 2);
+    const usdcPrice = priceMap.get(usdcMint);
+    assert.ok(usdcPrice !== undefined);
+    assert.ok(usdcPrice > 0);
+    assert.ok(usdcPrice < 2);
   });
 
-  test("returns null for invalid token", async () => {
-    const endpoint = process.env.QUICKNODE_SOLANA_MAINNET_ENDPOINT;
-    if (!endpoint) {
-      throw new Error("QUICKNODE_SOLANA_MAINNET_ENDPOINT not set");
-    }
-
+  test("returns empty map for invalid tokens", async () => {
     const invalidMint = "1111111111111111111111111111111111111111111";
-    const priceData = await getTokenPrice(endpoint, invalidMint);
+    const priceMap = await getTokenPrices([invalidMint]);
 
-    assert.strictEqual(priceData, null);
+    assert.ok(priceMap instanceof Map);
+    assert.strictEqual(priceMap.size, 0);
+  });
+
+  test("fetches prices for multiple tokens", async () => {
+    const usdcMint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    const solMint = "So11111111111111111111111111111111111111112";
+    const priceMap = await getTokenPrices([usdcMint, solMint]);
+
+    assert.ok(priceMap.size > 0);
+    const usdcPrice = priceMap.get(usdcMint);
+    assert.ok(usdcPrice !== undefined);
+    assert.ok(usdcPrice > 0);
   });
 });
 

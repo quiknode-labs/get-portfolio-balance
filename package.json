@@ -4,7 +4,6 @@
   "type": "module",
   "scripts": {
     "start": "tsx get-portfolio-balance.ts",
-    "start:defillama": "tsx get-portfolio-balance-defillama.ts",
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
