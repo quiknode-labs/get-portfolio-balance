@@ -8,14 +8,16 @@ import {
   type TokenPriceInfo,
 } from "./lib/interfaces.js";
 import { ensureError } from "./lib/utils.js";
+import { resolveName } from "./name-resolution/resolve-name.js";
+
+const TOKEN_PROGRAM_ID = address(
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+);
 
 export const getTokenAccounts = async function (
   connection: ReturnType<typeof connect>,
   walletAddress: Address,
 ): Promise<Array<TokenAccount>> {
-  const TOKEN_PROGRAM_ID = address(
-    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-  );
 
   const response = await connection.rpc
     .getTokenAccountsByOwner(walletAddress, {
@@ -129,7 +131,11 @@ export const getPortfolioBalance = async function (
   console.log(`\n💼 Address: ${walletAddressString}\n`);
 
   const connection = connect("quicknode-mainnet");
-  const walletAddress = address(walletAddressString);
+
+  // Resolve domain name to address if needed
+  const walletAddress = walletAddressString.includes(".")
+    ? await resolveName(walletAddressString)
+    : address(walletAddressString);
 
   const solBalanceResponse = await connection.rpc.getBalance(walletAddress).send();
   const solBalance = Number(solBalanceResponse.value) / 1000000000;
@@ -212,10 +218,17 @@ export const getPortfolioBalance = async function (
 };
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const testWalletAddress = "dDCQNnDmNbFVi8cQhKAgXhyhXeJ625tvwsunRyRc7c8";
+  const walletAddressOrName = process.argv[2];
+
+  if (!walletAddressOrName) {
+    console.error("Usage: npm start <address-or-domain>");
+    console.error("Example: npm start mikemaccana.sol");
+    console.error("Example: npm start dDCQNnDmNbFVi8cQhKAgXhyhXeJ625tvwsunRyRc7c8");
+    process.exit(1);
+  }
 
   try {
-    await getPortfolioBalance(testWalletAddress);
+    await getPortfolioBalance(walletAddressOrName);
   } catch (thrownObject) {
     const error = ensureError(thrownObject);
     console.error(`Error: ${error.message}`);

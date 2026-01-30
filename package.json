@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@solana/kit": "^2.2.3",
+    "borsh": "^2.0.0",
     "solana-kite": "^2.1.0"
   },
   "devDependencies": {

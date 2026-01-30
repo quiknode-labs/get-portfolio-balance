@@ -21,13 +21,18 @@ npm install
 
 ## Usage
 
-Run the script with the test wallet:
+Run the script with a Solana address or .sol domain:
 
 ```bash
-npm start
+npm start <address-or-domain>
 ```
 
-Modify the wallet address in [get-portfolio-balance.ts](get-portfolio-balance.ts) to check a different wallet.
+Examples:
+
+```bash
+npm start mikemaccana.sol
+npm start dDCQNnDmNbFVi8cQhKAgXhyhXeJ625tvwsunRyRc7c8
+```
 
 ## Testing
 
