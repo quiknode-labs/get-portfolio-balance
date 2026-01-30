@@ -10,24 +10,42 @@ import {
 import { ensureError } from "./lib/utils.js";
 import { resolveName } from "./name-resolution/resolve-name.js";
 
-const TOKEN_PROGRAM_ID = address(
+const CLASSIC_TOKEN_PROGRAM_ID = address(
   "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+);
+
+const TOKEN_EXTENSIONS_PROGRAM_ID = address(
+  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
 );
 
 export const getTokenAccounts = async function (
   connection: ReturnType<typeof connect>,
   walletAddress: Address,
 ): Promise<Array<TokenAccount>> {
+  // Query both Classic Token Program and Token Extensions Program
+  const [classicTokenProgramResponse, tokenExtensionsProgramResponse] = await Promise.all([
+    connection.rpc
+      .getTokenAccountsByOwner(walletAddress, {
+        programId: CLASSIC_TOKEN_PROGRAM_ID,
+      }, {
+        encoding: "jsonParsed",
+      })
+      .send(),
+    connection.rpc
+      .getTokenAccountsByOwner(walletAddress, {
+        programId: TOKEN_EXTENSIONS_PROGRAM_ID,
+      }, {
+        encoding: "jsonParsed",
+      })
+      .send(),
+  ]);
 
-  const response = await connection.rpc
-    .getTokenAccountsByOwner(walletAddress, {
-      programId: TOKEN_PROGRAM_ID,
-    }, {
-      encoding: "jsonParsed",
-    })
-    .send();
+  const allAccounts = [
+    ...classicTokenProgramResponse.value,
+    ...tokenExtensionsProgramResponse.value,
+  ];
 
-  return response.value.map((accountInfo: any) => {
+  return allAccounts.map((accountInfo: any) => {
     const parsedInfo = accountInfo.account.data.parsed.info;
     return {
       mint: parsedInfo.mint,
