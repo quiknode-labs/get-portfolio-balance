@@ -1,6 +1,6 @@
 export interface TokenAccount {
   mint: string;
-  amount: number;
+  amount: bigint;
   decimals: number;
 }
 
@@ -28,7 +28,7 @@ export interface JupiterTokenInfo {
 export interface PortfolioToken {
   mint: string;
   tokenSymbol: string;
-  balance: number;
+  balance: bigint;
   priceUsd: number;
   valueUsd: number;
 }

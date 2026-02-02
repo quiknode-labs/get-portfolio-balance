@@ -1,104 +1,14 @@
-import { connect } from "solana-kite";
-import { address, type Address } from "@solana/kit";
-import {
-  type TokenAccount,
-  type JupiterPriceData,
-  type JupiterTokenInfo,
-  type PortfolioToken,
-  type TokenPriceInfo,
-} from "./lib/interfaces.js";
+import { connect, SOL } from "solana-kite";
+import { address } from "@solana/kit";
+import { type TokenAccount, type PortfolioToken } from "./lib/interfaces.js";
 import { ensureError } from "./lib/utils.js";
-import { resolveName } from "./name-resolution/resolve-name.js";
+import { resolveName } from "./lib/sns.js";
+import { getTokenPrices } from "./lib/jupiter.js";
+import { displayPortfolio } from "./lib/formatting.js";
+import { WSOL_MINT } from "./lib/constants.js";
 
-export const SOL_MINT = "So11111111111111111111111111111111111111112";
-
-export const getTokenSymbols = async function (
-  mintAddresses: Array<string>,
-): Promise<Map<string, string>> {
-  const jupiterApiKey = process.env.JUPITER_API_KEY;
-
-  if (!jupiterApiKey) {
-    console.warn("JUPITER_API_KEY not set, using shortened mint addresses");
-    return new Map();
-  }
-
-  const symbolMap = new Map<string, string>();
-
-  for (const mint of mintAddresses) {
-    try {
-      const response = await fetch(
-        `https://api.jup.ag/tokens/v2/search?query=${mint}`,
-        {
-          headers: {
-            "x-api-key": jupiterApiKey,
-          },
-        },
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const tokenInfo = data[0] as JupiterTokenInfo;
-          symbolMap.set(mint, tokenInfo.symbol);
-        }
-      }
-    } catch (thrownObject) {
-      const error = ensureError(thrownObject);
-      console.warn(`Failed to fetch symbol for ${mint}: ${error.message}`);
-    }
-  }
-
-  return symbolMap;
-};
-
-export const getTokenPrices = async function (
-  mintAddresses: Array<string>,
-): Promise<Map<string, TokenPriceInfo>> {
-  const jupiterApiKey = process.env.JUPITER_API_KEY;
-
-  if (!jupiterApiKey) {
-    console.warn("JUPITER_API_KEY not set, skipping price fetch");
-    return new Map();
-  }
-
-  const idsParam = mintAddresses.join(",");
-  const jupiterUrl = `https://api.jup.ag/price/v3?ids=${idsParam}`;
-
-  try {
-    const response = await fetch(jupiterUrl, {
-      headers: {
-        "x-api-key": jupiterApiKey,
-      },
-    });
-
-    if (!response.ok) {
-      console.warn(`Failed to fetch prices from Jupiter: ${response.status}`);
-      return new Map();
-    }
-
-    const data = await response.json();
-    const priceMap = new Map<string, TokenPriceInfo>();
-
-    const symbolMap = await getTokenSymbols(mintAddresses);
-
-    for (const [mint, priceData] of Object.entries(data)) {
-      const jupiterData = priceData as JupiterPriceData;
-      if (jupiterData.usdPrice) {
-        const tokenSymbol = symbolMap.get(mint) || mint.substring(0, 8);
-        priceMap.set(mint, {
-          price: jupiterData.usdPrice,
-          tokenSymbol: tokenSymbol,
-        });
-      }
-    }
-
-    return priceMap;
-  } catch (thrownObject) {
-    const error = ensureError(thrownObject);
-    console.warn(`Error fetching prices from Jupiter: ${error.message}`);
-    return new Map();
-  }
-};
+// Re-export WSOL_MINT for backwards compatibility
+export { WSOL_MINT };
 
 export const getPortfolioBalance = async function (
   walletAddressString: string,
@@ -108,28 +18,28 @@ export const getPortfolioBalance = async function (
   const connection = connect("quicknode-mainnet");
 
   // Resolve domain name to address if needed
-  const walletAddress = walletAddressString.includes(".")
+  const walletAddress = walletAddressString.endsWith(".sol")
     ? await resolveName(walletAddressString)
     : address(walletAddressString);
 
-  const solBalanceResponse = await connection.rpc.getBalance(walletAddress).send();
-  const solBalance = Number(solBalanceResponse.value) / 1000000000;
+  const solBalance = await connection.getLamportBalance(walletAddress);
 
-  const rawTokenAccounts = await connection.getTokenAccounts(walletAddress);
+  const rawTokenAccounts = await connection.getTokenAccounts(
+    walletAddress,
+    true,
+  );
 
-  const tokenAccountsWithBalance = rawTokenAccounts
-    .map((accountInfo: any) => {
-      const parsedInfo = accountInfo.account.data.parsed.info;
-      return {
-        mint: parsedInfo.mint,
-        amount: parsedInfo.tokenAmount.uiAmount,
-        decimals: parsedInfo.tokenAmount.decimals,
-      };
-    })
-    .filter((account: TokenAccount) => account.amount > 0);
+  const tokenAccountsWithBalance = rawTokenAccounts.map((accountInfo: any) => {
+    const parsedInfo = accountInfo.account.data.parsed.info;
+    return {
+      mint: parsedInfo.mint,
+      amount: BigInt(parsedInfo.tokenAmount.amount),
+      decimals: parsedInfo.tokenAmount.decimals,
+    };
+  });
 
   const allMintAddresses = [
-    SOL_MINT,
+    WSOL_MINT,
     ...tokenAccountsWithBalance.map((account: TokenAccount) => account.mint),
   ];
 
@@ -139,12 +49,12 @@ export const getPortfolioBalance = async function (
   let totalValueUsd = 0;
   let tokensWithoutPrices = 0;
 
-  const solPriceInfo = priceMap.get(SOL_MINT);
-  if (solPriceInfo && solBalance > 0) {
-    const solValueUsd = solBalance * solPriceInfo.price;
+  const solPriceInfo = priceMap.get(WSOL_MINT);
+  if (solPriceInfo && solBalance > 0n) {
+    const solValueUsd = Number(solBalance) / Number(SOL) * solPriceInfo.price;
     totalValueUsd += solValueUsd;
     portfolio.push({
-      mint: SOL_MINT,
+      mint: WSOL_MINT,
       tokenSymbol: "SOL",
       balance: solBalance,
       priceUsd: solPriceInfo.price,
@@ -160,7 +70,8 @@ export const getPortfolioBalance = async function (
       continue;
     }
 
-    const valueUsd = tokenAccount.amount * priceInfo.price;
+    const balanceInUiUnits = Number(tokenAccount.amount) / Math.pow(10, tokenAccount.decimals);
+    const valueUsd = balanceInUiUnits * priceInfo.price;
     totalValueUsd += valueUsd;
 
     portfolio.push({
@@ -174,28 +85,12 @@ export const getPortfolioBalance = async function (
 
   portfolio.sort((a, b) => b.valueUsd - a.valueUsd);
 
-  for (const token of portfolio) {
-    const formattedBalance = token.balance.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    const alignedBalance = formattedBalance.padStart(20);
-
-    const formattedValue = token.valueUsd.toFixed(2);
-    const alignedValue = formattedValue.padStart(10);
-
-    console.log(
-      `  ${token.tokenSymbol.padEnd(10)} ${alignedBalance} 💵 $${alignedValue}`,
-    );
-  }
-
-  console.log(`\n💰 Total: $${totalValueUsd.toFixed(2)}`);
-
-  if (tokensWithoutPrices > 0) {
-    console.log(
-      `\n❓ Plus ${tokensWithoutPrices} token${tokensWithoutPrices === 1 ? "" : "s"} for which no price could be obtained`,
-    );
-  }
+  displayPortfolio(
+    portfolio,
+    tokenAccountsWithBalance,
+    totalValueUsd,
+    tokensWithoutPrices,
+  );
 };
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -204,7 +99,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (!walletAddressOrName) {
     console.error("Usage: npm start <address-or-domain>");
     console.error("Example: npm start mikemaccana.sol");
-    console.error("Example: npm start dDCQNnDmNbFVi8cQhKAgXhyhXeJ625tvwsunRyRc7c8");
+    console.error(
+      "Example: npm start dDCQNnDmNbFVi8cQhKAgXhyhXeJ625tvwsunRyRc7c8",
+    );
     process.exit(1);
   }
 

@@ -2,17 +2,20 @@ import { connect } from "solana-kite";
 import { address, type Address, getProgramDerivedAddress } from "@solana/kit";
 import { getBase58Encoder, getBase58Decoder } from "@solana/codecs";
 import { createHash } from "node:crypto";
-import { ensureError } from "../lib/utils.js";
+import { ensureError } from "./utils.js";
+
+// SNS doesn't have a Solana Kit library te, let's make one!
 
 // SNS Constants
 const SNS_PROGRAM_ID = address("namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX");
-const SOL_TLD_AUTHORITY = address("58PwtjSDuFHuUkYjH9BYnnQKHfwo9reZhC2zMJv9JPkx");
+const SOL_TLD_AUTHORITY = address(
+  "58PwtjSDuFHuUkYjH9BYnnQKHfwo9reZhC2zMJv9JPkx",
+);
 const SOL_TLD_AUTHORITY_BYTES = getBase58Encoder().encode(SOL_TLD_AUTHORITY);
 const HASH_PREFIX = "SPL Name Service";
 const SNS_CLASS_BYTES_SIZE = 32;
 const SNS_OWNER_OFFSET_START = 32;
 const SNS_OWNER_OFFSET_END = 64;
-
 
 const getHashedName = function (name: string): Uint8Array {
   const input = HASH_PREFIX + name;
@@ -49,7 +52,10 @@ const resolveSNS = async function (domain: string): Promise<Address> {
 
   const accountData = Buffer.from(accountInfo.value.data[0], "base64");
 
-  const ownerBytes = accountData.subarray(SNS_OWNER_OFFSET_START, SNS_OWNER_OFFSET_END);
+  const ownerBytes = accountData.subarray(
+    SNS_OWNER_OFFSET_START,
+    SNS_OWNER_OFFSET_END,
+  );
   const ownerAddress = getBase58Decoder().decode(ownerBytes);
 
   return address(ownerAddress);
@@ -80,10 +86,14 @@ export const resolveName = async function (input: string): Promise<Address> {
       return await resolveSNS(input);
     } catch (thrownObject) {
       const error = ensureError(thrownObject);
-      throw new Error(`Failed to resolve SNS domain ${input}: ${error.message}`);
+      throw new Error(
+        `Failed to resolve SNS domain ${input}: ${error.message}`,
+      );
     }
   }
 
   // Other TLDs not yet supported
-  throw new Error(`Domain TLD ${tld} not supported. Only .sol domains are currently supported.`);
+  throw new Error(
+    `Domain TLD ${tld} not supported. Only .sol domains are currently supported.`,
+  );
 };

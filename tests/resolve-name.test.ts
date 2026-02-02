@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert";
-import { resolveName } from "../name-resolution/resolve-name.js";
+import { resolveName } from "../lib/sns.js";
 
 describe("resolveName", () => {
   test("passes through valid Solana address", async () => {

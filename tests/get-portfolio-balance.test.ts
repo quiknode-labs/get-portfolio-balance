@@ -2,12 +2,8 @@ import { describe, test } from "node:test";
 import assert from "node:assert";
 import { connect } from "solana-kite";
 import { address } from "@solana/kit";
-import {
-  getTokenSymbols,
-  getTokenPrices,
-  getPortfolioBalance,
-  SOL_MINT,
-} from "../get-portfolio-balance.js";
+import { getTokenSymbols, getTokenPrices } from "../lib/jupiter.js";
+import { getPortfolioBalance, WSOL_MINT } from "../get-portfolio-balance.js";
 
 describe("getTokenSymbols", () => {
   test("fetches symbols for known tokens", async () => {
@@ -64,14 +60,14 @@ describe("getTokenPrices", () => {
     }
 
     const usdcMint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-    const priceMap = await getTokenPrices([usdcMint, SOL_MINT]);
+    const priceMap = await getTokenPrices([usdcMint, WSOL_MINT]);
 
     assert.ok(priceMap.size > 0);
     const usdcPriceInfo = priceMap.get(usdcMint);
     assert.ok(usdcPriceInfo !== undefined);
     assert.ok(usdcPriceInfo.price > 0);
 
-    const solPriceInfo = priceMap.get(SOL_MINT);
+    const solPriceInfo = priceMap.get(WSOL_MINT);
     assert.ok(solPriceInfo !== undefined);
     assert.ok(solPriceInfo.price > 0);
     assert.strictEqual(solPriceInfo.tokenSymbol, "SOL");
