@@ -18,6 +18,8 @@ const TOKEN_EXTENSIONS_PROGRAM_ID = address(
   "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
 );
 
+export const SOL_MINT = "So11111111111111111111111111111111111111112";
+
 export const getTokenAccounts = async function (
   connection: ReturnType<typeof connect>,
   walletAddress: Address,
@@ -165,7 +167,7 @@ export const getPortfolioBalance = async function (
   );
 
   const allMintAddresses = [
-    "So11111111111111111111111111111111111111112",
+    SOL_MINT,
     ...nonZeroAccounts.map((account) => account.mint),
   ];
 
@@ -175,13 +177,12 @@ export const getPortfolioBalance = async function (
   let totalValueUsd = 0;
   let tokensWithoutPrices = 0;
 
-  const solMint = "So11111111111111111111111111111111111111112";
-  const solPriceInfo = priceMap.get(solMint);
+  const solPriceInfo = priceMap.get(SOL_MINT);
   if (solPriceInfo && solBalance > 0) {
     const solValueUsd = solBalance * solPriceInfo.price;
     totalValueUsd += solValueUsd;
     portfolio.push({
-      mint: solMint,
+      mint: SOL_MINT,
       tokenSymbol: "SOL",
       balance: solBalance,
       priceUsd: solPriceInfo.price,

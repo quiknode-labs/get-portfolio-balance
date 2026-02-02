@@ -9,6 +9,9 @@ const SNS_PROGRAM_ID = address("namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX");
 const SOL_TLD_AUTHORITY = address("58PwtjSDuFHuUkYjH9BYnnQKHfwo9reZhC2zMJv9JPkx");
 const SOL_TLD_AUTHORITY_BYTES = getBase58Encoder().encode(SOL_TLD_AUTHORITY);
 const HASH_PREFIX = "SPL Name Service";
+const SNS_CLASS_BYTES_SIZE = 32;
+const SNS_OWNER_OFFSET_START = 32;
+const SNS_OWNER_OFFSET_END = 64;
 
 
 const getHashedName = function (name: string): Uint8Array {
@@ -28,7 +31,7 @@ const resolveSNS = async function (domain: string): Promise<Address> {
 
   // Prepare seeds: hashedName, class (undefined = zeros), parent (ROOT_DOMAIN_ACCOUNT)
   // For top-level .sol domains, class is zeros and parent is ROOT_DOMAIN_ACCOUNT
-  const classBytes = new Uint8Array(32); // zeros for top-level domains
+  const classBytes = new Uint8Array(SNS_CLASS_BYTES_SIZE);
 
   // Derive PDA with three separate seeds (NOT concatenated)
   const [nameAccountKey] = await getProgramDerivedAddress({
@@ -36,7 +39,6 @@ const resolveSNS = async function (domain: string): Promise<Address> {
     seeds: [hashedName, classBytes, SOL_TLD_AUTHORITY_BYTES],
   });
 
-  // Fetch account
   const accountInfo = await connection.rpc
     .getAccountInfo(nameAccountKey, { encoding: "base64" })
     .send();
@@ -45,11 +47,9 @@ const resolveSNS = async function (domain: string): Promise<Address> {
     throw new Error(`Domain ${domain} not found`);
   }
 
-  // Decode base64 data
-  const data = Buffer.from(accountInfo.value.data[0], "base64");
+  const accountData = Buffer.from(accountInfo.value.data[0], "base64");
 
-  // Extract owner from bytes 32-63
-  const ownerBytes = data.subarray(32, 64);
+  const ownerBytes = accountData.subarray(SNS_OWNER_OFFSET_START, SNS_OWNER_OFFSET_END);
   const ownerAddress = getBase58Decoder().decode(ownerBytes);
 
   return address(ownerAddress);

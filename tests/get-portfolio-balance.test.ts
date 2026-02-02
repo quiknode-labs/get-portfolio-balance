@@ -7,6 +7,7 @@ import {
   getTokenSymbols,
   getTokenPrices,
   getPortfolioBalance,
+  SOL_MINT,
 } from "../get-portfolio-balance.js";
 
 describe("getTokenSymbols", () => {
@@ -64,15 +65,14 @@ describe("getTokenPrices", () => {
     }
 
     const usdcMint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-    const solMint = "So11111111111111111111111111111111111111112";
-    const priceMap = await getTokenPrices([usdcMint, solMint]);
+    const priceMap = await getTokenPrices([usdcMint, SOL_MINT]);
 
     assert.ok(priceMap.size > 0);
     const usdcPriceInfo = priceMap.get(usdcMint);
     assert.ok(usdcPriceInfo !== undefined);
     assert.ok(usdcPriceInfo.price > 0);
 
-    const solPriceInfo = priceMap.get(solMint);
+    const solPriceInfo = priceMap.get(SOL_MINT);
     assert.ok(solPriceInfo !== undefined);
     assert.ok(solPriceInfo.price > 0);
     assert.strictEqual(solPriceInfo.tokenSymbol, "SOL");
