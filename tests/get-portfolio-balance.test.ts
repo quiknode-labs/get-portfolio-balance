@@ -3,7 +3,6 @@ import assert from "node:assert";
 import { connect } from "solana-kite";
 import { address } from "@solana/kit";
 import {
-  getTokenAccounts,
   getTokenSymbols,
   getTokenPrices,
   getPortfolioBalance,
@@ -86,14 +85,10 @@ describe("getTokenAccounts", () => {
       "dDCQNnDmNbFVi8cQhKAgXhyhXeJ625tvwsunRyRc7c8",
     );
 
-    const tokenAccounts = await getTokenAccounts(connection, walletAddress);
+    const tokenAccounts = await connection.getTokenAccounts(walletAddress);
 
     assert.ok(Array.isArray(tokenAccounts));
-    tokenAccounts.forEach((account) => {
-      assert.ok(typeof account.mint === "string");
-      assert.ok(typeof account.amount === "number");
-      assert.ok(typeof account.decimals === "number");
-    });
+    assert.ok(tokenAccounts.length > 0);
   });
 });
 

@@ -7,9 +7,10 @@
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@solana/codecs": "^5.5.1",
     "@solana/kit": "^2.2.3",
     "borsh": "^2.0.0",
-    "solana-kite": "^2.1.0"
+    "solana-kite": "file:../kite"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

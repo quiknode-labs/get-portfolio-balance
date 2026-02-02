@@ -10,52 +10,7 @@ import {
 import { ensureError } from "./lib/utils.js";
 import { resolveName } from "./name-resolution/resolve-name.js";
 
-const CLASSIC_TOKEN_PROGRAM_ID = address(
-  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-);
-
-const TOKEN_EXTENSIONS_PROGRAM_ID = address(
-  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-);
-
 export const SOL_MINT = "So11111111111111111111111111111111111111112";
-
-export const getTokenAccounts = async function (
-  connection: ReturnType<typeof connect>,
-  walletAddress: Address,
-): Promise<Array<TokenAccount>> {
-  // Query both Classic Token Program and Token Extensions Program
-  const [classicTokenProgramResponse, tokenExtensionsProgramResponse] = await Promise.all([
-    connection.rpc
-      .getTokenAccountsByOwner(walletAddress, {
-        programId: CLASSIC_TOKEN_PROGRAM_ID,
-      }, {
-        encoding: "jsonParsed",
-      })
-      .send(),
-    connection.rpc
-      .getTokenAccountsByOwner(walletAddress, {
-        programId: TOKEN_EXTENSIONS_PROGRAM_ID,
-      }, {
-        encoding: "jsonParsed",
-      })
-      .send(),
-  ]);
-
-  const allAccounts = [
-    ...classicTokenProgramResponse.value,
-    ...tokenExtensionsProgramResponse.value,
-  ];
-
-  return allAccounts.map((accountInfo: any) => {
-    const parsedInfo = accountInfo.account.data.parsed.info;
-    return {
-      mint: parsedInfo.mint,
-      amount: parsedInfo.tokenAmount.uiAmount,
-      decimals: parsedInfo.tokenAmount.decimals,
-    };
-  });
-};
 
 export const getTokenSymbols = async function (
   mintAddresses: Array<string>,
@@ -160,15 +115,22 @@ export const getPortfolioBalance = async function (
   const solBalanceResponse = await connection.rpc.getBalance(walletAddress).send();
   const solBalance = Number(solBalanceResponse.value) / 1000000000;
 
-  const tokenAccounts = await getTokenAccounts(connection, walletAddress);
+  const rawTokenAccounts = await connection.getTokenAccounts(walletAddress);
 
-  const nonZeroAccounts = tokenAccounts.filter(
-    (account) => account.amount > 0,
-  );
+  const tokenAccountsWithBalance = rawTokenAccounts
+    .map((accountInfo: any) => {
+      const parsedInfo = accountInfo.account.data.parsed.info;
+      return {
+        mint: parsedInfo.mint,
+        amount: parsedInfo.tokenAmount.uiAmount,
+        decimals: parsedInfo.tokenAmount.decimals,
+      };
+    })
+    .filter((account: TokenAccount) => account.amount > 0);
 
   const allMintAddresses = [
     SOL_MINT,
-    ...nonZeroAccounts.map((account) => account.mint),
+    ...tokenAccountsWithBalance.map((account: TokenAccount) => account.mint),
   ];
 
   const priceMap = await getTokenPrices(allMintAddresses);
@@ -190,7 +152,7 @@ export const getPortfolioBalance = async function (
     });
   }
 
-  for (const tokenAccount of nonZeroAccounts) {
+  for (const tokenAccount of tokenAccountsWithBalance) {
     const priceInfo = priceMap.get(tokenAccount.mint);
 
     if (!priceInfo) {
