@@ -3,14 +3,14 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "tsx get-portfolio-balance.ts",
+    "get-portfolio": "tsx get-portfolio-balance.ts",
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@solana/codecs": "^5.5.1",
     "@solana/kit": "^2.2.3",
     "borsh": "^2.0.0",
-    "solana-kite": "file:../kite"
+    "solana-kite": "^3.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -3,7 +3,7 @@ import assert from "node:assert";
 import { connect } from "solana-kite";
 import { address } from "@solana/kit";
 import { getTokenSymbols, getTokenPrices } from "../lib/jupiter.js";
-import { getPortfolioBalance, WSOL_MINT } from "../get-portfolio-balance.js";
+import { WRAPPED_SOL_MINT_ADDRESS } from "../lib/constants.js";
 
 describe("getTokenSymbols", () => {
   test("fetches symbols for known tokens", async () => {
@@ -60,14 +60,14 @@ describe("getTokenPrices", () => {
     }
 
     const usdcMint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-    const priceMap = await getTokenPrices([usdcMint, WSOL_MINT]);
+    const priceMap = await getTokenPrices([usdcMint, WRAPPED_SOL_MINT_ADDRESS]);
 
     assert.ok(priceMap.size > 0);
     const usdcPriceInfo = priceMap.get(usdcMint);
     assert.ok(usdcPriceInfo !== undefined);
     assert.ok(usdcPriceInfo.price > 0);
 
-    const solPriceInfo = priceMap.get(WSOL_MINT);
+    const solPriceInfo = priceMap.get(WRAPPED_SOL_MINT_ADDRESS);
     assert.ok(solPriceInfo !== undefined);
     assert.ok(solPriceInfo.price > 0);
     assert.strictEqual(solPriceInfo.tokenSymbol, "SOL");
@@ -85,19 +85,5 @@ describe("getTokenAccounts", () => {
 
     assert.ok(Array.isArray(tokenAccounts));
     assert.ok(tokenAccounts.length > 0);
-  });
-});
-
-describe("getPortfolioBalance", () => {
-  test("calculates portfolio balance for valid wallet", async () => {
-    const jupiterApiKey = process.env.JUPITER_API_KEY;
-    if (!jupiterApiKey) {
-      console.log("⚠️  JUPITER_API_KEY not set - skipping test");
-      return;
-    }
-
-    await getPortfolioBalance(
-      "dDCQNnDmNbFVi8cQhKAgXhyhXeJ625tvwsunRyRc7c8",
-    );
   });
 });

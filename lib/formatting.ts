@@ -1,5 +1,5 @@
 import { type PortfolioToken, type TokenAccount } from "./interfaces.js";
-import { WSOL_MINT } from "./constants.js";
+import { WRAPPED_SOL_MINT_ADDRESS } from "./constants.js";
 
 /**
  * Formats a token balance from base units to UI units with proper decimal places.
@@ -40,10 +40,12 @@ export const displayPortfolioToken = function (
   token: PortfolioToken,
   tokenAccountsWithBalance: Array<TokenAccount>,
 ): void {
-  const decimals = token.mint === WSOL_MINT
-    ? 9
-    : tokenAccountsWithBalance.find((t) => t.mint === token.mint)?.decimals ??
-      0;
+  const decimals =
+    token.mint === WRAPPED_SOL_MINT_ADDRESS
+      ? 9
+      : (tokenAccountsWithBalance.find(
+          (tokenAccount) => tokenAccount.mint === token.mint,
+        )?.decimals ?? 0);
 
   const alignedBalance = formatTokenBalance(token.balance, decimals);
   const alignedValue = formatUsdValue(token.valueUsd);

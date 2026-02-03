@@ -5,22 +5,28 @@ import { ensureError } from "./lib/utils.js";
 import { resolveName } from "./lib/sns.js";
 import { getTokenPrices } from "./lib/jupiter.js";
 import { displayPortfolio } from "./lib/formatting.js";
-import { WSOL_MINT } from "./lib/constants.js";
+import { WRAPPED_SOL_MINT_ADDRESS } from "./lib/constants.js";
 
-// Re-export WSOL_MINT for backwards compatibility
-export { WSOL_MINT };
+const walletAddressOrName = process.argv[2];
 
-export const getPortfolioBalance = async function (
-  walletAddressString: string,
-): Promise<void> {
-  console.log(`\n💼 Address: ${walletAddressString}\n`);
+if (!walletAddressOrName) {
+  console.error("Usage: npm run get-portfolio <address-or-domain>");
+  console.error("Example: npm run get-portfolio mikemaccana.sol");
+  console.error(
+    "Example: npm run get-portfolio dDCQNnDmNbFVi8cQhKAgXhyhXeJ625tvwsunRyRc7c8",
+  );
+  process.exit(1);
+}
+
+try {
+  console.log(`\n💼 Address: ${walletAddressOrName}\n`);
 
   const connection = connect("quicknode-mainnet");
 
   // Resolve domain name to address if needed
-  const walletAddress = walletAddressString.endsWith(".sol")
-    ? await resolveName(walletAddressString)
-    : address(walletAddressString);
+  const walletAddress = walletAddressOrName.endsWith(".sol")
+    ? await resolveName(walletAddressOrName)
+    : address(walletAddressOrName);
 
   const solBalance = await connection.getLamportBalance(walletAddress);
 
@@ -39,7 +45,8 @@ export const getPortfolioBalance = async function (
   });
 
   const allMintAddresses = [
-    WSOL_MINT,
+    // We use wrapped SOL as the identifier to get the price of regular, non wrapped SOL.
+    WRAPPED_SOL_MINT_ADDRESS,
     ...tokenAccountsWithBalance.map((account: TokenAccount) => account.mint),
   ];
 
@@ -49,12 +56,12 @@ export const getPortfolioBalance = async function (
   let totalValueUsd = 0;
   let tokensWithoutPrices = 0;
 
-  const solPriceInfo = priceMap.get(WSOL_MINT);
+  const solPriceInfo = priceMap.get(WRAPPED_SOL_MINT_ADDRESS);
   if (solPriceInfo && solBalance > 0n) {
-    const solValueUsd = Number(solBalance) / Number(SOL) * solPriceInfo.price;
+    const solValueUsd = (Number(solBalance) / Number(SOL)) * solPriceInfo.price;
     totalValueUsd += solValueUsd;
     portfolio.push({
-      mint: WSOL_MINT,
+      mint: WRAPPED_SOL_MINT_ADDRESS,
       tokenSymbol: "SOL",
       balance: solBalance,
       priceUsd: solPriceInfo.price,
@@ -70,7 +77,8 @@ export const getPortfolioBalance = async function (
       continue;
     }
 
-    const balanceInUiUnits = Number(tokenAccount.amount) / Math.pow(10, tokenAccount.decimals);
+    const balanceInUiUnits =
+      Number(tokenAccount.amount) / Math.pow(10, tokenAccount.decimals);
     const valueUsd = balanceInUiUnits * priceInfo.price;
     totalValueUsd += valueUsd;
 
@@ -91,25 +99,8 @@ export const getPortfolioBalance = async function (
     totalValueUsd,
     tokensWithoutPrices,
   );
-};
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const walletAddressOrName = process.argv[2];
-
-  if (!walletAddressOrName) {
-    console.error("Usage: npm start <address-or-domain>");
-    console.error("Example: npm start mikemaccana.sol");
-    console.error(
-      "Example: npm start dDCQNnDmNbFVi8cQhKAgXhyhXeJ625tvwsunRyRc7c8",
-    );
-    process.exit(1);
-  }
-
-  try {
-    await getPortfolioBalance(walletAddressOrName);
-  } catch (thrownObject) {
-    const error = ensureError(thrownObject);
-    console.error(`Error: ${error.message}`);
-    process.exit(1);
-  }
+} catch (thrownObject) {
+  const error = ensureError(thrownObject);
+  console.error(`Error: ${error.message}`);
+  process.exit(1);
 }
